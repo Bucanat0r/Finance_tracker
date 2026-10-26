@@ -4,7 +4,10 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'tables.dart';
 
 // This line tells the code generator where to write its output. The file
-// does not exist yet; build_runner creates it (step 4).
+// app_database.g.dart is created by build_runner. It contains the base class
+// _$AppDatabase and the table accessors (accounts, transactions, ...).
+// If that file is missing or stale, every table name below shows as
+// "undefined" in the editor.
 part 'app_database.g.dart';
 
 @DriftDatabase(
@@ -25,10 +28,52 @@ class AppDatabase extends _$AppDatabase {
     onCreate: (m) async {
       // Runs once, on first launch: create all the tables.
       await m.createAll();
+
+      // Give the user sensible starting categories so budgets and
+      // reports have something to attach to. They can add, rename or
+      // delete them later. A batch sends all the inserts in one go,
+      // which is faster than inserting one by one.
+      await batch((b) {
+        b.insertAll(categories, [
+          // Income
+          CategoriesCompanion.insert(name: 'Salary', kind: TxnKind.income),
+          CategoriesCompanion.insert(name: 'Business', kind: TxnKind.income),
+          CategoriesCompanion.insert(name: 'Gifts', kind: TxnKind.income),
+          CategoriesCompanion.insert(
+            name: 'Other income',
+            kind: TxnKind.income,
+          ),
+          // Expenses
+          CategoriesCompanion.insert(name: 'Food', kind: TxnKind.expense),
+          CategoriesCompanion.insert(name: 'Transport', kind: TxnKind.expense),
+          CategoriesCompanion.insert(
+            name: 'Airtime & data',
+            kind: TxnKind.expense,
+          ),
+          CategoriesCompanion.insert(
+            name: 'Bills & utilities',
+            kind: TxnKind.expense,
+          ),
+          CategoriesCompanion.insert(name: 'Shopping', kind: TxnKind.expense),
+          CategoriesCompanion.insert(
+            name: 'Entertainment',
+            kind: TxnKind.expense,
+          ),
+          CategoriesCompanion.insert(
+            name: 'Bank charges',
+            kind: TxnKind.expense,
+          ),
+          CategoriesCompanion.insert(
+            name: 'Other expenses',
+            kind: TxnKind.expense,
+          ),
+        ]);
+      });
     },
     beforeOpen: (details) async {
       // SQLite ignores foreign keys unless you switch them on. Without
-      // this, the "cascade" and "set null" rules above do nothing.
+      // this, the "cascade" and "set null" rules in tables.dart do
+      // nothing.
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
@@ -69,6 +114,7 @@ class AppDatabase extends _$AppDatabase {
     // DateTime rolls month 13 over into January of next year for us.
     final end = DateTime(year, month + 1);
 
+    // Adds up all transactions of one kind inside the month.
     Future<int> sumFor(TxnKind kind) async {
       final total = transactions.amountKobo.sum();
       final row =
@@ -87,6 +133,7 @@ class AppDatabase extends _$AppDatabase {
     final expense = await sumFor(TxnKind.expense);
 
     // Net profit/loss for the month is income - expense.
+    // Expenses are stored negative, so we flip the sign for display.
     return (income: income, expense: -expense);
   }
 }
