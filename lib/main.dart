@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'screens/home_page.dart';
+import 'screens/app_shell.dart';
 
 void main() {
   // Required before using plugins (like the one that finds the database
@@ -19,7 +19,8 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const HomePage(),
+      // The shell holds the bottom bar and the main screens.
+      home: const AppShell(),
     );
   }
 }
