@@ -150,8 +150,9 @@ class _DashboardState extends State<_Dashboard> {
           // Transfers are skipped on purpose: moving your own money between
           // accounts is neither income nor spending.
           if (r.kind == TxnKind.income) income += r.amountKobo;
-          if (r.kind == TxnKind.expense)
+          if (r.kind == TxnKind.expense) {
             expense += -r.amountKobo; // Flip to positive.
+          }
         }
         final net = income - expense;
 
