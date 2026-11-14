@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'budgets_page.dart';
 import 'home_page.dart';
 import 'more_page.dart';
+import 'reports_page.dart';
 
 /// The frame around the app's main screens: a bottom bar to switch between
-/// them. When we add Reports, it becomes one more tab here.
+/// them.
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -17,7 +18,7 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
 
   // The screens, in the same order as the bottom bar items below.
-  final _pages = const [HomePage(), BudgetsPage(), MorePage()];
+  final _pages = const [HomePage(), BudgetsPage(), ReportsPage(), MorePage()];
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +39,11 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.pie_chart_outline),
             selectedIcon: Icon(Icons.pie_chart),
             label: 'Budgets',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart),
+            label: 'Reports',
           ),
           NavigationDestination(
             icon: Icon(Icons.more_horiz),
