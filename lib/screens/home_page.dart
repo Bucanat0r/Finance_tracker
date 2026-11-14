@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../data/app_database.dart';
 import '../data/database_instance.dart';
 import '../data/tables.dart';
+import '../data/transaction_queries.dart';
 import '../utils/formatters.dart';
 import 'add_account_dialog.dart';
 import 'add_transaction_page.dart';
+import 'transfer_page.dart';
 
 /// The main screen. It first checks that at least one account exists. If not,
 /// it asks you to create one. Otherwise it shows the dashboard.
@@ -40,6 +42,17 @@ class _HomePageState extends State<HomePage> {
           appBar: AppBar(
             title: const Text('Finance Tracker'),
             actions: [
+              // A transfer needs two accounts, so the button only appears
+              // once you have at least two.
+              if (accounts.length >= 2)
+                IconButton(
+                  tooltip: 'Transfer between accounts',
+                  icon: const Icon(Icons.swap_horiz),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const TransferPage()),
+                  ),
+                ),
               IconButton(
                 tooltip: 'Add account',
                 icon: const Icon(Icons.account_balance_wallet_outlined),
@@ -127,7 +140,8 @@ class _DashboardState extends State<_Dashboard> {
 
         // BALANCE = all opening balances + every transaction in the ledger.
         // Nothing is stored: it is recalculated each time, so it can never
-        // disagree with the transactions.
+        // disagree with the transactions. Transfers cancel out here: one
+        // account goes down by the same amount the other goes up.
         final opening = widget.accounts.fold<int>(
           0,
           (sum, a) => sum + a.openingBalanceKobo,
@@ -135,11 +149,9 @@ class _DashboardState extends State<_Dashboard> {
         final ledger = rows.fold<int>(0, (sum, r) => sum + r.amountKobo);
         final balance = opening + ledger;
 
-        // THIS MONTH's totals. We add them up here in Dart (not in SQL)
-        // because the list is already loaded and we want the numbers to
-        // update the instant the list changes. For a personal app this is
-        // fast enough. If the list ever gets very large we can move this to
-        // a database query.
+        // THIS MONTH's totals, added up here in Dart because the list is
+        // already loaded and the numbers should update the instant it
+        // changes. For a personal app this is fast enough.
         final now = DateTime.now();
         var income = 0;
         var expense = 0;
@@ -150,9 +162,8 @@ class _DashboardState extends State<_Dashboard> {
           // Transfers are skipped on purpose: moving your own money between
           // accounts is neither income nor spending.
           if (r.kind == TxnKind.income) income += r.amountKobo;
-          if (r.kind == TxnKind.expense) {
+          if (r.kind == TxnKind.expense)
             expense += -r.amountKobo; // Flip to positive.
-          }
         }
         final net = income - expense;
 
@@ -257,7 +268,11 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-/// One transaction in the list. Swipe it to the left to delete it.
+/// One transaction in the list.
+///  - Tap it to edit (income and expenses).
+///  - Swipe it to the left to delete it.
+/// Transfers cannot be edited, because they are two linked rows. To fix one,
+/// delete it (both halves go) and add it again.
 class _TxnTile extends StatelessWidget {
   const _TxnTile({required this.row});
 
@@ -266,10 +281,19 @@ class _TxnTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isTransfer = row.kind == TxnKind.transfer;
     final isIncome = row.amountKobo > 0;
-    final color = isIncome ? Colors.green.shade700 : scheme.error;
 
-    // Title: the bank's description if there is one, otherwise the category.
+    // Transfers get a neutral colour: they are neither good nor bad news.
+    final color = isTransfer
+        ? scheme.primary
+        : (isIncome ? Colors.green.shade700 : scheme.error);
+
+    final icon = isTransfer
+        ? Icons.swap_horiz
+        : (isIncome ? Icons.arrow_downward : Icons.arrow_upward);
+
+    // Title: the description if there is one, otherwise the category.
     final title = row.narration.isNotEmpty
         ? row.narration
         : (row.categoryName ?? (isIncome ? 'Income' : 'Expense'));
@@ -297,9 +321,15 @@ class _TxnTile extends StatelessWidget {
         final ok = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Delete transaction?'),
+            title: Text(
+              isTransfer ? 'Delete transfer?' : 'Delete transaction?',
+            ),
             content: Text(
-              'This removes ${formatNaira(row.amountKobo)} from your records.',
+              isTransfer
+                  ? 'Both sides of this transfer will be removed, so both '
+                        'account balances go back to how they were.'
+                  : 'This removes ${formatNaira(row.amountKobo)} from your '
+                        'records.',
             ),
             actions: [
               TextButton(
@@ -315,14 +345,12 @@ class _TxnTile extends StatelessWidget {
         );
         return ok ?? false;
       },
-      onDismissed: (_) => db.deleteTransaction(row.id),
+      // "Smart" delete: removes both halves when it is a transfer.
+      onDismissed: (_) => db.deleteTransactionSmart(row.id),
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: color.withValues(alpha: 0.12),
-          child: Icon(
-            isIncome ? Icons.arrow_downward : Icons.arrow_upward,
-            color: color,
-          ),
+          child: Icon(icon, color: color),
         ),
         title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -330,6 +358,24 @@ class _TxnTile extends StatelessWidget {
           formatNaira(row.amountKobo),
           style: TextStyle(color: color, fontWeight: FontWeight.w600),
         ),
+        onTap: () {
+          if (isTransfer) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Transfers cannot be edited. Swipe to delete it, then add it again.',
+                ),
+              ),
+            );
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AddTransactionPage(transactionId: row.id),
+            ),
+          );
+        },
       ),
     );
   }

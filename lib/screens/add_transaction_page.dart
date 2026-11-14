@@ -3,19 +3,27 @@ import 'package:flutter/material.dart';
 import '../data/app_database.dart';
 import '../data/database_instance.dart';
 import '../data/tables.dart';
+import '../data/transaction_queries.dart';
 import '../utils/formatters.dart';
 
-/// The form for adding one income or expense by hand.
+/// The form for one income or expense.
+///
+/// It does two jobs with the same screen:
+///  - [transactionId] is null: it ADDS a new transaction.
+///  - [transactionId] is set: it EDITS that transaction, pre-filled.
+/// Sharing one form means the add and edit screens can never drift apart.
 class AddTransactionPage extends StatefulWidget {
-  const AddTransactionPage({super.key});
+  const AddTransactionPage({super.key, this.transactionId});
+
+  final int? transactionId;
 
   @override
   State<AddTransactionPage> createState() => _AddTransactionPageState();
 }
 
 class _AddTransactionPageState extends State<AddTransactionPage> {
-  // Text controllers hold what is typed. They must be disposed (below) to
-  // free their memory when the page closes.
+  // Text controllers hold what is typed. They are disposed below to free
+  // their memory when the page closes.
   final _amountCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
 
@@ -28,6 +36,8 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
 
   List<Account> _accounts = [];
   List<Category> _categories = [];
+
+  bool get _isEditing => widget.transactionId != null;
 
   @override
   void initState() {
@@ -42,18 +52,51 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
     super.dispose();
   }
 
-  /// Loads the accounts and categories the form needs to offer.
+  /// Kobo to an editable number: 5000000 -> "50000", 5050 -> "50.50".
+  String _plain(int kobo) {
+    final whole = kobo ~/ 100;
+    final cents = kobo % 100;
+    return cents == 0 ? '$whole' : '$whole.${cents.toString().padLeft(2, '0')}';
+  }
+
+  /// Loads what the form needs: the accounts, the categories, and (when
+  /// editing) the transaction itself.
   Future<void> _loadData() async {
     final accounts = await db.getAccounts();
-    final categories = await db.getCategories(_kind);
+
+    // "final" so Dart can safely use it inside setState below.
+    final TxnDetails? existing = _isEditing
+        ? await db.getTransactionDetails(widget.transactionId!)
+        : null;
+
+    // The transaction may have been deleted meanwhile. Transfers are handled
+    // elsewhere (they are two linked rows), so they cannot be edited here.
+    if (_isEditing && (existing == null || existing.kind == TxnKind.transfer)) {
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+
+    final kind = existing?.kind ?? _kind;
+    final categories = await db.getCategories(kind);
 
     // The page may have been closed while we waited.
     if (!mounted) return;
     setState(() {
       _accounts = accounts;
       _categories = categories;
-      // Pre-select the first account so the common case needs no extra tap.
-      _accountId = accounts.isNotEmpty ? accounts.first.id : null;
+      _kind = kind;
+
+      if (existing != null) {
+        _accountId = existing.accountId;
+        _categoryId = existing.categoryId;
+        _date = existing.occurredAt;
+        // The amount is stored signed; the form always shows it positive.
+        _amountCtrl.text = _plain(existing.amountKobo.abs());
+        _noteCtrl.text = existing.narration;
+      } else {
+        // Pre-select the first account so the common case needs no extra tap.
+        _accountId = accounts.isNotEmpty ? accounts.first.id : null;
+      }
       _loading = false;
     });
   }
@@ -76,7 +119,10 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
       context: context,
       initialDate: _date,
       firstDate: DateTime(2000),
-      lastDate: DateTime.now(), // No future dates: money has not moved yet.
+      // One day ahead of now, to avoid timezone edge cases around midnight,
+      // and so a transaction dated "just now" is always a valid starting
+      // point for the picker.
+      lastDate: DateTime.now().add(const Duration(days: 1)),
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -102,16 +148,28 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
       return;
     }
 
-    // Pass the amount as a positive number. addTransaction() makes expenses
-    // negative itself, so the sign can never be wrong here.
-    await db.addTransaction(
-      accountId: _accountId!,
-      categoryId: _categoryId,
-      amountKobo: kobo,
-      kind: _kind,
-      occurredAt: _date,
-      narration: _noteCtrl.text.trim(),
-    );
+    // The amount goes in as a positive number. The database methods make
+    // expenses negative themselves, so the sign can never be wrong here.
+    if (_isEditing) {
+      await db.updateTransaction(
+        id: widget.transactionId!,
+        accountId: _accountId!,
+        categoryId: _categoryId,
+        amountKobo: kobo,
+        kind: _kind,
+        occurredAt: _date,
+        narration: _noteCtrl.text.trim(),
+      );
+    } else {
+      await db.addTransaction(
+        accountId: _accountId!,
+        categoryId: _categoryId,
+        amountKobo: kobo,
+        kind: _kind,
+        occurredAt: _date,
+        narration: _noteCtrl.text.trim(),
+      );
+    }
 
     if (!mounted) return;
     Navigator.pop(context);
@@ -120,7 +178,9 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add transaction')),
+      appBar: AppBar(
+        title: Text(_isEditing ? 'Edit transaction' : 'Add transaction'),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -147,7 +207,9 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
 
                 TextField(
                   controller: _amountCtrl,
-                  autofocus: true,
+                  // Only pop the keyboard up automatically when ADDING.
+                  // When editing, it would cover the fields you came to see.
+                  autofocus: !_isEditing,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
@@ -225,7 +287,10 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
                 ],
                 const SizedBox(height: 24),
 
-                FilledButton(onPressed: _save, child: const Text('Save')),
+                FilledButton(
+                  onPressed: _save,
+                  child: Text(_isEditing ? 'Save changes' : 'Save'),
+                ),
               ],
             ),
     );
