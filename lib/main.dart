@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'screens/app_lock_gate.dart';
 import 'screens/app_shell.dart';
 
 void main() {
@@ -19,7 +20,12 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      // The shell holds the bottom bar and the main screens.
+      // "builder" wraps the app's navigator, so the lock screen sits ABOVE
+      // every screen and popup. If we wrapped only the home screen instead,
+      // any screen you had pushed on top (like the Add form) would hide the
+      // lock.
+      builder: (context, child) =>
+          AppLockGate(child: child ?? const SizedBox.shrink()),
       home: const AppShell(),
     );
   }

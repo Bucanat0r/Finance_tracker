@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'accounts_page.dart';
 import 'categories_page.dart';
+import 'security_page.dart';
 
 /// The "More" tab: a menu for everything that is not a main screen.
-/// Reports, the app lock and backup will be added here later.
+/// Backup will be added here later.
 class MorePage extends StatelessWidget {
   const MorePage({super.key});
 
@@ -32,6 +33,16 @@ class MorePage extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const CategoriesPage()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.lock_outline),
+            title: const Text('App lock'),
+            subtitle: const Text('Protect the app with a PIN'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SecurityPage()),
             ),
           ),
         ],
