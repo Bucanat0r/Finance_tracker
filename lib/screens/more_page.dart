@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'accounts_page.dart';
+import 'backup_page.dart';
 import 'categories_page.dart';
 import 'security_page.dart';
 
 /// The "More" tab: a menu for everything that is not a main screen.
-/// Backup will be added here later.
 class MorePage extends StatelessWidget {
   const MorePage({super.key});
 
@@ -43,6 +43,18 @@ class MorePage extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const SecurityPage()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.backup_outlined),
+            title: const Text('Backup & export'),
+            subtitle: const Text(
+              'Back up, restore, or export to a spreadsheet',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BackupPage()),
             ),
           ),
         ],
