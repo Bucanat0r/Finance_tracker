@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'accounts_page.dart';
 import 'backup_page.dart';
+import 'bank_alerts_page.dart';
 import 'categories_page.dart';
 import 'security_page.dart';
 
@@ -33,6 +34,16 @@ class MorePage extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const CategoriesPage()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.sms_outlined),
+            title: const Text('Bank alerts'),
+            subtitle: const Text('Link accounts and import bank alerts'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BankAlertsPage()),
             ),
           ),
           ListTile(
